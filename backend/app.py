@@ -7,8 +7,6 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
-import concurrent.futures
-
 BASE_DIR = Path(__file__).resolve().parent
 
 # Load the existing .env before importing the RAG pipeline.
@@ -171,33 +169,77 @@ def health():
         "rag_import_error": str(RAG_IMPORT_ERROR) if RAG_IMPORT_ERROR else None
     }), 200
 
-@app.get("/api/diag-7f3c9a2e")
-def diag_7f3c9a2e():
-    """
-    Temporary deployment diagnostic. Reports which phase stalls without
-    returning any secret values. Safe to remove once production is healthy.
-    """
-    def timed(fn, seconds=20):
-        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        future = executor.submit(fn)
-        try:
-            return {"ok": True, "value": future.result(timeout=seconds)}
-        except concurrent.futures.TimeoutError:
-            return {"ok": False, "error": f"timeout after {seconds}s"}
-        except Exception as exc:
-            return {"ok": False, "error": repr(exc)}
-        finally:
-            executor.shutdown(wait=False, cancel_futures=True)
+@app.get("/api/diag-fs-7f3c9a2e")
+def diag_fs_7f3c9a2e():
+    """Temporary: filesystem + SQLite probe (no Chroma, no network)."""
+    import sqlite3
 
-    from query import embeddings, rag_health
+    from query import CHROMA_DIR
 
-    chroma = timed(rag_health)
-    embed = timed(lambda: len(embeddings.embed_query("ping")))
-    return jsonify({
-        "rag_import_error": str(RAG_IMPORT_ERROR) if RAG_IMPORT_ERROR else None,
-        "chroma": chroma,
-        "embedding": embed
-    }), 200
+    started = time.perf_counter()
+    try:
+        files = sorted(os.listdir(CHROMA_DIR))
+        db_path = os.path.join(CHROMA_DIR, "chroma.sqlite3")
+        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
+            rows = conn.execute(
+                "select count(*) from embeddings"
+            ).fetchone()[0]
+        return jsonify({
+            "ok": True,
+            "dir": CHROMA_DIR,
+            "files": files,
+            "sqlite_rows": rows,
+            "elapsed_ms": round((time.perf_counter() - started) * 1000)
+        }), 200
+    except Exception as exc:
+        return jsonify({
+            "ok": False,
+            "dir": CHROMA_DIR,
+            "error": repr(exc),
+            "elapsed_ms": round((time.perf_counter() - started) * 1000)
+        }), 200
+
+
+@app.get("/api/diag-embed-7f3c9a2e")
+def diag_embed_7f3c9a2e():
+    """Temporary: Gemini embedding probe (no Chroma)."""
+    from query import embeddings
+
+    started = time.perf_counter()
+    try:
+        vector = embeddings.embed_query("ping")
+        return jsonify({
+            "ok": True,
+            "dimensions": len(vector),
+            "elapsed_ms": round((time.perf_counter() - started) * 1000)
+        }), 200
+    except Exception as exc:
+        return jsonify({
+            "ok": False,
+            "error": repr(exc),
+            "elapsed_ms": round((time.perf_counter() - started) * 1000)
+        }), 200
+
+
+@app.get("/api/diag-chroma-7f3c9a2e")
+def diag_chroma_7f3c9a2e():
+    """Temporary: ChromaDB collection probe."""
+    from query import rag_health
+
+    started = time.perf_counter()
+    try:
+        info = rag_health()
+        return jsonify({
+            "ok": True,
+            "info": info,
+            "elapsed_ms": round((time.perf_counter() - started) * 1000)
+        }), 200
+    except Exception as exc:
+        return jsonify({
+            "ok": False,
+            "error": repr(exc),
+            "elapsed_ms": round((time.perf_counter() - started) * 1000)
+        }), 200
 
 
 @app.post("/api/chat")
