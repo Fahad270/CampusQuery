@@ -203,11 +203,11 @@ def diag_fs_7f3c9a2e():
 @app.get("/api/diag-embed-7f3c9a2e")
 def diag_embed_7f3c9a2e():
     """Temporary: Gemini embedding probe (no Chroma)."""
-    from query import embeddings
+    from query import get_embeddings
 
     started = time.perf_counter()
     try:
-        vector = embeddings.embed_query("ping")
+        vector = get_embeddings().embed_query("ping")
         return jsonify({
             "ok": True,
             "dimensions": len(vector),

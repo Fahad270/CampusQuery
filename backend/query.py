@@ -1,6 +1,7 @@
 
 import logging
 import os
+import threading
 import time
 from pathlib import Path
 
@@ -61,28 +62,78 @@ def create_embeddings():
 
     return embeddings
 
-embeddings=create_embeddings()
 
+# ---------------------------------------------------------------------------
+# Lazy, per-process clients
+# ---------------------------------------------------------------------------
+# These are built on first use instead of at import time. ChromaDB holds an
+# open SQLite connection and native state that cannot survive a fork, so a
+# client created at import time deadlocks the worker whenever the process
+# manager forks after import (for example `gunicorn --preload`). Building the
+# clients lazily (and resetting them in forked children) means every worker
+# process owns fresh, working connections.
+#
 # Loading the EXISTING ChromaDB
 # This connects to the persisted collection; it does NOT re-ingest the PDF.
 # The committed backend/chroma_db folder means deployments start with the
 # policy already indexed and never need to embed the PDF at boot.
-vectorStore=Chroma(
-    collection_name=COLLECTION_NAME,
-    embedding_function=embeddings,
-    persist_directory=CHROMA_DIR,
-    client_settings=Settings(anonymized_telemetry=False)
-)
+_clients_lock = threading.Lock()
+_embeddings = None
+_vector_store = None
+_model = None
 
-# Model Creation !
-# Created once per process so Flask requests reuse the same client.
-model=ChatGoogleGenerativeAI(
-    model=GENERATION_MODEL,
-    api_key=api_key,
-    temperature=0,
-    timeout=GEMINI_TIMEOUT,
-    max_retries=GEMINI_MAX_RETRIES
-)
+
+def _reset_clients():
+    """Drop clients inherited from the parent process after a fork."""
+    global _embeddings, _vector_store, _model
+    _embeddings = None
+    _vector_store = None
+    _model = None
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_clients)
+
+
+def get_embeddings():
+    """Return this process's Gemini embedding client."""
+    global _embeddings
+    if _embeddings is None:
+        with _clients_lock:
+            if _embeddings is None:
+                _embeddings = create_embeddings()
+    return _embeddings
+
+
+def get_vector_store():
+    """Connect to the persisted ChromaDB collection for this process."""
+    global _vector_store
+    if _vector_store is None:
+        with _clients_lock:
+            if _vector_store is None:
+                _vector_store = Chroma(
+                    collection_name=COLLECTION_NAME,
+                    embedding_function=get_embeddings(),
+                    persist_directory=CHROMA_DIR,
+                    client_settings=Settings(anonymized_telemetry=False)
+                )
+    return _vector_store
+
+
+def get_model():
+    """Return this process's Gemini generation client."""
+    global _model
+    if _model is None:
+        with _clients_lock:
+            if _model is None:
+                _model = ChatGoogleGenerativeAI(
+                    model=GENERATION_MODEL,
+                    api_key=api_key,
+                    temperature=0,
+                    timeout=GEMINI_TIMEOUT,
+                    max_retries=GEMINI_MAX_RETRIES
+                )
+    return _model
 
 
 # Performing the Match ! THE ACTUAL RETRIEVAL OF THE RELATED DATA
@@ -140,7 +191,7 @@ def answer_question(query):
     # 1. Embed only the student's query. This is the only embedding API call.
     try:
         embed_started = time.perf_counter()
-        query_vector = embeddings.embed_query(query)
+        query_vector = get_embeddings().embed_query(query)
         embed_ms = (time.perf_counter() - embed_started) * 1000
     except Exception as exc:
         raise VectorStoreError("Failed to embed the student query") from exc
@@ -148,7 +199,7 @@ def answer_question(query):
     # 2. Retrieve the top-k relevant chunks from the existing collection.
     try:
         retrieval_started = time.perf_counter()
-        results = vectorStore.similarity_search_by_vector(
+        results = get_vector_store().similarity_search_by_vector(
             query_vector,
             k=TOP_K
         )
@@ -200,7 +251,7 @@ def answer_question(query):
     # 4. Generate the grounded answer with Gemini.
     try:
         generation_started = time.perf_counter()
-        response = model.invoke(prompt)
+        response = get_model().invoke(prompt)
         generation_ms = (time.perf_counter() - generation_started) * 1000
     except Exception as exc:
         raise GenerationError("Gemini failed to generate an answer") from exc
@@ -258,7 +309,7 @@ def retrieval_data(vectorStore,query):
 def rag_health():
     """Lightweight check used by /api/health. Does not call Gemini."""
     try:
-        document_count = vectorStore._collection.count()
+        document_count = get_vector_store()._collection.count()
     except Exception as exc:
         raise VectorStoreError("ChromaDB collection is not accessible") from exc
 
