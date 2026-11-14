@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Environment files (never commit API keys)
+.env
+.env.*
+!.env.example
+
+# Generated vector index and ingestion manifest
+backend/chroma_db/
+
+# Node / frontend build output
+frontend/node_modules/
+frontend/dist/
+npm-debug.log*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
