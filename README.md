@@ -280,6 +280,8 @@ CampusQuery is designed for separate frontend and backend deployment.
 
 **Persistence note:** Render's default filesystem is ephemeral, but the built ChromaDB index (about 1.7 MB) is committed in `backend/chroma_db`, so every deploy/restart starts with the 14 policy chunks already indexed. No ingestion and no embedding calls happen during startup, which keeps cold starts fast. If you change the PDF locally, run `python ingest.py` and commit the refreshed `chroma_db` folder. A persistent disk (`CHROMA_DIR=/var/data/chroma_db`) is only needed if you plan to ingest documents at runtime.
 
+**Worker note:** The Gemini and ChromaDB clients are created lazily on the first request, not while the module is imported. ChromaDB holds an open SQLite connection and native state that cannot be inherited across a `fork`, so building the client at import time deadlocks the worker when gunicorn forks after import (for example with `--preload`). Lazy creation means each worker process opens its own healthy connection.
+
 ### Environment variables
 
 | Variable | Default | Purpose |
