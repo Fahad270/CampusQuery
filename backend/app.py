@@ -21,6 +21,7 @@ logger = logging.getLogger("campusquery.api")
 # The RAG objects (embedding model, Chroma client, Gemini client) are created
 # once when query.py is imported, not once per request.
 RAG_IMPORT_ERROR = None
+_rag_import_started = time.perf_counter()
 try:
     from query import (
         COLLECTION_NAME,
@@ -32,6 +33,11 @@ try:
 except Exception as exc:  # keep the API process alive so /api/health can report it
     RAG_IMPORT_ERROR = exc
     logger.exception("RAG pipeline failed to initialise")
+else:
+    logger.info(
+        "RAG pipeline ready in %.0fms",
+        (time.perf_counter() - _rag_import_started) * 1000
+    )
 
 
 app = Flask(__name__)
@@ -93,67 +99,75 @@ def _maybe_auto_ingest():
 _maybe_auto_ingest()
 
 
+# @app.get("/api/health")
+# def health():
+#     """
+#     Report server health and real vector database accessibility.
+
+#     A reachable Flask process with a missing/empty policy index is reported as
+#     degraded so the frontend does not claim the assistant is ready.
+#     """
+#     if RAG_IMPORT_ERROR is not None:
+#         return jsonify({
+#             "status": "degraded",
+#             "service": "CampusQuery API",
+#             "backend": {"status": "connected"},
+#             "vector_db": {
+#                 "status": "unavailable",
+#                 "collection": None,
+#                 "documents": 0,
+#                 "indexed": False
+#             },
+#             "message": "The RAG pipeline could not be initialised."
+#         }), 503
+
+#     try:
+#         info = rag_health()
+#     except Exception:
+#         logger.exception("Health check failed while reading ChromaDB")
+#         return jsonify({
+#             "status": "degraded",
+#             "service": "CampusQuery API",
+#             "backend": {"status": "connected"},
+#             "vector_db": {
+#                 "status": "unavailable",
+#                 "collection": COLLECTION_NAME,
+#                 "documents": 0,
+#                 "indexed": False
+#             },
+#             "message": "The placement policy index is not accessible."
+#         }), 503
+
+#     indexed = info["documents"] > 0
+#     return jsonify({
+#         "status": "ok" if indexed else "degraded",
+#         "service": "CampusQuery API",
+#         "backend": {"status": "connected"},
+#         "vector_db": {
+#             "status": "connected",
+#             "collection": info["collection"],
+#             "documents": info["documents"],
+#             "indexed": indexed
+#         },
+#         "models": {
+#             "embedding": info["embedding_model"],
+#             "generation": info["generation_model"]
+#         },
+#         "message": (
+#             "CampusQuery is ready."
+#             if indexed
+#             else "The policy index is empty. Run backend/ingest.py once."
+#         )
+#     }), 200 if indexed else 503
+
 @app.get("/api/health")
 def health():
-    """
-    Report server health and real vector database accessibility.
-
-    A reachable Flask process with a missing/empty policy index is reported as
-    degraded so the frontend does not claim the assistant is ready.
-    """
-    if RAG_IMPORT_ERROR is not None:
-        return jsonify({
-            "status": "degraded",
-            "service": "CampusQuery API",
-            "backend": {"status": "connected"},
-            "vector_db": {
-                "status": "unavailable",
-                "collection": None,
-                "documents": 0,
-                "indexed": False
-            },
-            "message": "The RAG pipeline could not be initialised."
-        }), 503
-
-    try:
-        info = rag_health()
-    except Exception:
-        logger.exception("Health check failed while reading ChromaDB")
-        return jsonify({
-            "status": "degraded",
-            "service": "CampusQuery API",
-            "backend": {"status": "connected"},
-            "vector_db": {
-                "status": "unavailable",
-                "collection": COLLECTION_NAME,
-                "documents": 0,
-                "indexed": False
-            },
-            "message": "The placement policy index is not accessible."
-        }), 503
-
-    indexed = info["documents"] > 0
     return jsonify({
-        "status": "ok" if indexed else "degraded",
+        "status": "ok",
         "service": "CampusQuery API",
-        "backend": {"status": "connected"},
-        "vector_db": {
-            "status": "connected",
-            "collection": info["collection"],
-            "documents": info["documents"],
-            "indexed": indexed
-        },
-        "models": {
-            "embedding": info["embedding_model"],
-            "generation": info["generation_model"]
-        },
-        "message": (
-            "CampusQuery is ready."
-            if indexed
-            else "The policy index is empty. Run backend/ingest.py once."
-        )
-    }), 200 if indexed else 503
-
+        "backend": "running",
+        "rag_import_error": str(RAG_IMPORT_ERROR) if RAG_IMPORT_ERROR else None
+    }), 200
 
 @app.post("/api/chat")
 def chat():

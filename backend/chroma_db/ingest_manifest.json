@@ -1,0 +1,10 @@
+{
+  "source": "Final_Placement_Policy_2026-27.pdf",
+  "source_sha256": "8f9aae22aa4b31992ea89d9334c490dc2a48bf3b183bc521e01303ff3387c98d",
+  "collection": "placement_policy",
+  "embedding_model": "gemini-embedding-001",
+  "chunk_size": 1000,
+  "chunk_overlap": 200,
+  "chunks": 14,
+  "ingested_at": "2026-11-14T08:14:30Z"
+}

@@ -4,10 +4,15 @@ import os
 import time
 from pathlib import Path
 
+# Chroma's anonymous telemetry can block on slow deployments. Disable it before
+# chromadb is imported (it reads this environment variable at import time).
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
+
 from dotenv import load_dotenv
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_chroma import Chroma
+from chromadb.config import Settings
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -60,10 +65,13 @@ embeddings=create_embeddings()
 
 # Loading the EXISTING ChromaDB
 # This connects to the persisted collection; it does NOT re-ingest the PDF.
+# The committed backend/chroma_db folder means deployments start with the
+# policy already indexed and never need to embed the PDF at boot.
 vectorStore=Chroma(
     collection_name=COLLECTION_NAME,
     embedding_function=embeddings,
-    persist_directory=CHROMA_DIR
+    persist_directory=CHROMA_DIR,
+    client_settings=Settings(anonymized_telemetry=False)
 )
 
 # Model Creation !

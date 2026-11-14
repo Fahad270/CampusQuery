@@ -10,8 +10,9 @@ venv/
 .env.*
 !.env.example
 
-# Generated vector index and ingestion manifest
-backend/chroma_db/
+# Vector index is committed so deployments start with the policy already
+# indexed (Render's filesystem is ephemeral). Re-run ingest.py only when the
+# PDF changes, then commit the refreshed files.
 
 # Node / frontend build output
 frontend/node_modules/

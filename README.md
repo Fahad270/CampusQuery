@@ -147,7 +147,7 @@ CampusQuery/
 │   ├── query.py
 │   ├── requirements.txt
 │   ├── Final_Placement_Policy_2026-27.pdf
-│   ├── chroma_db/          # generated vector index (not committed)
+│   ├── chroma_db/          # committed index + ingestion manifest
 │   └── .env                # Gemini API key (never committed)
 │
 └── README.md
@@ -276,9 +276,9 @@ CampusQuery is designed for separate frontend and backend deployment.
 - Environment variables:
   - `FRONTEND_ORIGINS=https://your-app.vercel.app` (optional — CampusQuery already allows `campus-query*.vercel.app` by default)
   - `CHROMA_DIR=/var/data/chroma_db` when a persistent disk is mounted
-  - `AUTO_INGEST=true` for the first boot on an empty persistent disk
+  - `AUTO_INGEST=true` is not required — the committed index is ready at boot
 
-**Persistence note:** Render's default filesystem is ephemeral. Without a persistent disk, the ChromaDB index is lost on redeploy/restart. With `AUTO_INGEST=true` the 14 chunks are re-embedded on the next cold start — never on every student query. A persistent disk is the recommended setup.
+**Persistence note:** Render's default filesystem is ephemeral, but the built ChromaDB index (about 1.7 MB) is committed in `backend/chroma_db`, so every deploy/restart starts with the 14 policy chunks already indexed. No ingestion and no embedding calls happen during startup, which keeps cold starts fast. If you change the PDF locally, run `python ingest.py` and commit the refreshed `chroma_db` folder. A persistent disk (`CHROMA_DIR=/var/data/chroma_db`) is only needed if you plan to ingest documents at runtime.
 
 ### Environment variables
 
@@ -300,7 +300,7 @@ CampusQuery is designed for separate frontend and backend deployment.
 ## 🔐 Security & Responsible Usage
 
 - API credentials are stored as backend environment variables and are never sent to the browser.
-- Secrets must not be committed to the public repository. `.env`, the virtual environment, `node_modules`, build output and the generated Chroma index are excluded by `.gitignore`.
+- Secrets must not be committed to the public repository. `.env`, the virtual environment, `node_modules` and build output are excluded by `.gitignore`.
 - Responses should be checked against the original placement policy before being treated as authoritative.
 - CampusQuery is an information-access assistant, not a replacement for official TPC communication or policy documents.
 - The project does not imply official institutional endorsement.

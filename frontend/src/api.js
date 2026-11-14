@@ -25,7 +25,9 @@ async function readJson(response) {
 
 export async function getHealth() {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 8000)
+  // Render's free tier can take tens of seconds to wake from sleep, so allow
+  // more time than a warm request would need.
+  const timer = setTimeout(() => controller.abort(), 30000)
 
   try {
     const response = await fetch(`${API_BASE}/api/health`, {
