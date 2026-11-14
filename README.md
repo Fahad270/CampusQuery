@@ -319,6 +319,7 @@ CampusQuery is designed for separate frontend and backend deployment.
 - If a Gemini model is rate-limited (`429`) or overloaded (`503`), the next model in `GEMINI_FALLBACK_MODELS` answers instead. Free-tier quotas are per model per day, so this keeps the assistant available.
 - Production build succeeds; layout checked at 390, 768, 1024 and 1440 px without overflow.
 - Re-running ingestion skips re-embedding the same PDF.
+- Deployed Render + Vercel app verified end-to-end in a browser: connected status, real answer, source pages, TPC/TR note, and no console/CORS errors.
 
 ## 🔮 Future Improvements
 
