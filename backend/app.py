@@ -221,25 +221,98 @@ def diag_embed_7f3c9a2e():
         }), 200
 
 
+_CHROMA_PROBE = r"""
+import os
+import sys
+import time
+
+mark = time.perf_counter
+
+
+def step(message):
+    print("[%7.2fs] %s" % (mark(), message), flush=True)
+
+
+step("python %s" % sys.version.split()[0])
+try:
+    with open("/proc/meminfo") as meminfo:
+        for line in meminfo:
+            if line.startswith(("MemTotal", "MemFree", "MemAvailable", "SwapTotal")):
+                print(line.strip(), flush=True)
+except OSError:
+    step("no /proc/meminfo")
+step("cpu_count=%s" % os.cpu_count())
+
+step("import chromadb")
+import chromadb
+
+step("chromadb %s" % chromadb.__version__)
+
+from chromadb.config import Settings
+
+path = os.environ.get("CHROMA_DIR") or "chroma_db"
+step("path=%s isdir=%s" % (path, os.path.isdir(path)))
+
+step("creating PersistentClient")
+client = chromadb.PersistentClient(
+    path=path,
+    settings=Settings(anonymized_telemetry=False),
+)
+step("client created")
+
+step("heartbeat -> %r" % (client.heartbeat(),))
+step("collections -> %r" % ([c.name for c in client.list_collections()],))
+
+step("get_collection")
+collection = client.get_collection("placement_policy")
+step("collection loaded")
+
+step("count -> %r" % (collection.count(),))
+
+step("query (loads HNSW index)")
+result = collection.query(
+    query_embeddings=[[0.0] * 3072],
+    n_results=3,
+    include=["metadatas"],
+)
+step("query -> %r" % (len(result["ids"][0]),))
+step("DONE")
+"""
+
+
 @app.get("/api/diag-chroma-7f3c9a2e")
 def diag_chroma_7f3c9a2e():
-    """Temporary: ChromaDB collection probe."""
-    from query import rag_health
+    """Temporary: isolate ChromaDB calls in a child process."""
+    import subprocess
+    import sys
 
     started = time.perf_counter()
+    env = dict(os.environ)
+    env.setdefault("CHROMA_DIR", str(BASE_DIR / "chroma_db"))
+    env["ANONYMIZED_TELEMETRY"] = "False"
+    process = subprocess.Popen(
+        [sys.executable, "-u", "-c", _CHROMA_PROBE],
+        cwd=str(BASE_DIR),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        errors="replace",
+    )
+    timed_out = False
     try:
-        info = rag_health()
-        return jsonify({
-            "ok": True,
-            "info": info,
-            "elapsed_ms": round((time.perf_counter() - started) * 1000)
-        }), 200
-    except Exception as exc:
-        return jsonify({
-            "ok": False,
-            "error": repr(exc),
-            "elapsed_ms": round((time.perf_counter() - started) * 1000)
-        }), 200
+        output, _ = process.communicate(timeout=45)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        process.kill()
+        output, _ = process.communicate()
+
+    return jsonify({
+        "timed_out": timed_out,
+        "returncode": process.returncode,
+        "elapsed_ms": round((time.perf_counter() - started) * 1000),
+        "output": (output or "")[-6000:]
+    }), 200
 
 
 @app.post("/api/chat")
