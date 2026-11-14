@@ -339,3 +339,5 @@ The project explores the practical application of **Retrieval-Augmented Generati
 ---
 
 **Built with React, Flask, LangChain, ChromaDB and Google Gemini.**
+
+Made by **Fahad** and **Alston**.

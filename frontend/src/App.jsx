@@ -730,11 +730,14 @@ function App() {
       </main>
 
       <footer className="site-footer">
-        <div className="footer-brand">
-          <span className="footer-mark">CQ</span>
-          <span>CampusQuery · Your College Policy Assistant.</span>
+        <div className="footer-row">
+          <div className="footer-brand">
+            <span className="footer-mark">CQ</span>
+            <span>CampusQuery · Your College Policy Assistant.</span>
+          </div>
+          <p>Answers are grounded in the official placement policy.</p>
         </div>
-        <p>Answers are grounded in the official placement policy.</p>
+        <p className="footer-credit">Made by Fahad and Alston</p>
       </footer>
     </div>
   )

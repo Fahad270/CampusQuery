@@ -1239,14 +1239,21 @@ kbd {
 /* ---------------------------------------------------------------- footer */
 .site-footer {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
+  flex-direction: column;
+  gap: 12px;
   width: min(1240px, 100%);
   margin: 0 auto;
   padding: 18px 24px 26px;
   color: var(--blue);
   font-size: 0.69rem;
+}
+
+.footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: 100%;
 }
 
 .footer-brand {
@@ -1271,6 +1278,16 @@ kbd {
 .site-footer p {
   margin: 0;
   opacity: 0.78;
+}
+
+.footer-credit {
+  width: 100%;
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid currentColor;
+  text-align: center;
+  letter-spacing: 0.06em;
+  opacity: 0.7;
 }
 
 /* -------------------------------------------------------------- focus/a11y */
@@ -1503,11 +1520,16 @@ textarea:focus-visible {
   }
 
   .site-footer {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
+    align-items: stretch;
+    gap: 10px;
     padding: 16px 14px 24px;
     font-size: 0.65rem;
+  }
+
+  .footer-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
   }
 }
 
