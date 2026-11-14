@@ -38,7 +38,7 @@ However:
 |---|---|
 | Frontend | React, JavaScript, CSS |
 | Backend | Python, Flask |
-| LLM | Google Gemini (`gemini-2.5-flash`) |
+| LLM | Google Gemini (`gemini-3.5-flash`, with automatic model fallback) |
 | Embeddings | Gemini Embedding Model (`gemini-embedding-001`) |
 | RAG Framework | LangChain |
 | Vector Database | ChromaDB |
@@ -171,7 +171,7 @@ Returns `200` when Flask is reachable and the collection contains documents; oth
   },
   "models": {
     "embedding": "gemini-embedding-001",
-    "generation": "gemini-2.5-flash"
+    "generation": "gemini-3.5-flash"
   }
 }
 ```
@@ -289,7 +289,8 @@ CampusQuery is designed for separate frontend and backend deployment.
 | `api_key` | — | Gemini API key (backend `.env`, required) |
 | `CHROMA_DIR` | `backend/chroma_db` | Chroma persistence directory |
 | `POLICY_PDF` | existing PDF path | Document to ingest |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | Generation model |
+| `GEMINI_MODEL` | `gemini-3.5-flash` | Primary generation model |
+| `GEMINI_FALLBACK_MODELS` | `gemini-3.5-flash-lite,gemini-3.6-flash,gemini-2.5-flash` | Models tried in order when the primary is rate-limited or overloaded |
 | `TOP_K` | `3` | Number of retrieved chunks |
 | `GEMINI_TIMEOUT` | `45` | Gemini timeout in seconds |
 | `GEMINI_MAX_RETRIES` | `1` | SDK retry count |
@@ -315,6 +316,7 @@ CampusQuery is designed for separate frontend and backend deployment.
 - `Enter` submits; `Shift + Enter` inserts a new line.
 - Invalid/empty/oversized questions return `400`/`413`.
 - Gemini, ChromaDB and unexpected failures map to `502`, `503` and `500` with an error card and retry.
+- If a Gemini model is rate-limited (`429`) or overloaded (`503`), the next model in `GEMINI_FALLBACK_MODELS` answers instead. Free-tier quotas are per model per day, so this keeps the assistant available.
 - Production build succeeds; layout checked at 390, 768, 1024 and 1440 px without overflow.
 - Re-running ingestion skips re-embedding the same PDF.
 

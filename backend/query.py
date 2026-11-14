@@ -28,7 +28,16 @@ api_key = os.getenv("api_key")
 # Keep the same collection, embedding model, and top-k used by the original app.
 COLLECTION_NAME = "placement_policy"
 EMBEDDING_MODEL = "gemini-embedding-001"
-GENERATION_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GENERATION_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+# Gemini quotas are per model. If the primary model is rate-limited or
+# overloaded (HTTP 429/503), the same question is retried on the next model
+# instead of returning an error to the student.
+_default_fallbacks = "gemini-3.5-flash-lite,gemini-3.6-flash,gemini-2.5-flash"
+FALLBACK_MODELS = [
+    name.strip()
+    for name in os.getenv("GEMINI_FALLBACK_MODELS", _default_fallbacks).split(",")
+    if name.strip() and name.strip() != GENERATION_MODEL
+]
 TOP_K = int(os.getenv("TOP_K", "3"))
 CHROMA_DIR = os.getenv("CHROMA_DIR", str(BASE_DIR / "chroma_db"))
 GEMINI_TIMEOUT = float(os.getenv("GEMINI_TIMEOUT", "45"))
@@ -80,15 +89,15 @@ def create_embeddings():
 _clients_lock = threading.Lock()
 _embeddings = None
 _vector_store = None
-_model = None
+_models = {}
 
 
 def _reset_clients():
     """Drop clients inherited from the parent process after a fork."""
-    global _embeddings, _vector_store, _model
+    global _embeddings, _vector_store, _models
     _embeddings = None
     _vector_store = None
-    _model = None
+    _models = {}
 
 
 if hasattr(os, "register_at_fork"):
@@ -120,20 +129,20 @@ def get_vector_store():
     return _vector_store
 
 
-def get_model():
-    """Return this process's Gemini generation client."""
-    global _model
-    if _model is None:
+def get_model(model_name=None):
+    """Return this process's Gemini generation client for a given model."""
+    name = model_name or GENERATION_MODEL
+    if name not in _models:
         with _clients_lock:
-            if _model is None:
-                _model = ChatGoogleGenerativeAI(
-                    model=GENERATION_MODEL,
+            if name not in _models:
+                _models[name] = ChatGoogleGenerativeAI(
+                    model=name,
                     api_key=api_key,
                     temperature=0,
                     timeout=GEMINI_TIMEOUT,
                     max_retries=GEMINI_MAX_RETRIES
                 )
-    return _model
+    return _models[name]
 
 
 # Performing the Match ! THE ACTUAL RETRIEVAL OF THE RELATED DATA
@@ -248,17 +257,33 @@ def answer_question(query):
 
     """
 
-    # 4. Generate the grounded answer with Gemini.
-    try:
-        generation_started = time.perf_counter()
-        response = get_model().invoke(prompt)
-        generation_ms = (time.perf_counter() - generation_started) * 1000
-    except Exception as exc:
-        raise GenerationError("Gemini failed to generate an answer") from exc
+    # 4. Generate the grounded answer with Gemini. If a model is rate-limited
+    # (429) or overloaded (503), try the next configured model.
+    answer = ""
+    generation_ms = 0.0
+    used_model = None
+    failures = []
+    for model_name in [GENERATION_MODEL, *FALLBACK_MODELS]:
+        try:
+            generation_started = time.perf_counter()
+            response = get_model(model_name).invoke(prompt)
+            candidate_answer = _message_text(response)
+            if not candidate_answer:
+                raise ValueError("empty answer")
+        except Exception as exc:
+            failures.append("%s: %s" % (model_name, exc))
+            logger.warning("Gemini model %s failed: %s", model_name, exc)
+            continue
 
-    answer = _message_text(response)
+        answer = candidate_answer
+        used_model = model_name
+        generation_ms = (time.perf_counter() - generation_started) * 1000
+        break
+
     if not answer:
-        raise GenerationError("Gemini returned an empty answer")
+        raise GenerationError(
+            "Gemini failed to generate an answer: " + " | ".join(failures)
+        )
 
     # 5. Build real source references from the retrieved chunks.
     sources = []
@@ -280,12 +305,13 @@ def answer_question(query):
     total_ms = (time.perf_counter() - started) * 1000
     logger.info(
         "query complete embed=%.0fms retrieval=%.0fms generation=%.0fms "
-        "total=%.0fms chunks=%d sources=%s question_chars=%d",
+        "total=%.0fms chunks=%d model=%s sources=%s question_chars=%d",
         embed_ms,
         retrieval_ms,
         generation_ms,
         total_ms,
         len(results),
+        used_model,
         [(item["document"], item.get("page")) for item in sources],
         len(query)
     )
