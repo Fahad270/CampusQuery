@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
+import concurrent.futures
+
 BASE_DIR = Path(__file__).resolve().parent
 
 # Load the existing .env before importing the RAG pipeline.
@@ -168,6 +170,35 @@ def health():
         "backend": "running",
         "rag_import_error": str(RAG_IMPORT_ERROR) if RAG_IMPORT_ERROR else None
     }), 200
+
+@app.get("/api/diag-7f3c9a2e")
+def diag_7f3c9a2e():
+    """
+    Temporary deployment diagnostic. Reports which phase stalls without
+    returning any secret values. Safe to remove once production is healthy.
+    """
+    def timed(fn, seconds=20):
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        future = executor.submit(fn)
+        try:
+            return {"ok": True, "value": future.result(timeout=seconds)}
+        except concurrent.futures.TimeoutError:
+            return {"ok": False, "error": f"timeout after {seconds}s"}
+        except Exception as exc:
+            return {"ok": False, "error": repr(exc)}
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
+
+    from query import embeddings, rag_health
+
+    chroma = timed(rag_health)
+    embed = timed(lambda: len(embeddings.embed_query("ping")))
+    return jsonify({
+        "rag_import_error": str(RAG_IMPORT_ERROR) if RAG_IMPORT_ERROR else None,
+        "chroma": chroma,
+        "embedding": embed
+    }), 200
+
 
 @app.post("/api/chat")
 def chat():
