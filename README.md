@@ -274,7 +274,7 @@ CampusQuery is designed for separate frontend and backend deployment.
 - Build command: `pip install -r requirements.txt`
 - Start command: `gunicorn app:app --workers 1 --threads 4 --timeout 90`
 - Environment variables:
-  - `FRONTEND_ORIGINS=https://your-app.vercel.app`
+  - `FRONTEND_ORIGINS=https://your-app.vercel.app` (optional — CampusQuery already allows `campus-query*.vercel.app` by default)
   - `CHROMA_DIR=/var/data/chroma_db` when a persistent disk is mounted
   - `AUTO_INGEST=true` for the first boot on an empty persistent disk
 
@@ -291,8 +291,8 @@ CampusQuery is designed for separate frontend and backend deployment.
 | `TOP_K` | `3` | Number of retrieved chunks |
 | `GEMINI_TIMEOUT` | `45` | Gemini timeout in seconds |
 | `GEMINI_MAX_RETRIES` | `1` | SDK retry count |
-| `FRONTEND_ORIGINS` | localhost dev URLs | Comma-separated CORS origins |
-| `FRONTEND_ORIGIN_REGEX` | none | CORS regex for Vercel preview URLs |
+| `FRONTEND_ORIGINS` | localhost + `campus-query-navy.vercel.app` | Comma-separated CORS origins |
+| `FRONTEND_ORIGIN_REGEX` | `campus-query*.vercel.app` | CORS regex for production/preview URLs |
 | `AUTO_INGEST` | `false` | Ingest at startup only when the index is missing |
 | `LOG_LEVEL` | `INFO` | API log level |
 | `PORT` | `5000` | Flask port |

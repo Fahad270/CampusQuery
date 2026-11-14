@@ -38,20 +38,29 @@ app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
 
-# Reuse existing environment configuration. Local development origins are the
-# defaults; set FRONTEND_ORIGINS in production (comma-separated Vercel URLs).
+# Reuse existing environment configuration. Local development origins and the
+# deployed Vercel origins are allowed by default, so a missing environment
+# variable cannot break the deployed frontend. Override with FRONTEND_ORIGINS
+# (comma-separated) or FRONTEND_ORIGIN_REGEX when the domains change.
 _default_origins = (
     "http://localhost:5173,"
     "http://127.0.0.1:5173,"
     "http://localhost:4173,"
-    "http://127.0.0.1:4173"
+    "http://127.0.0.1:4173,"
+    "https://campus-query-navy.vercel.app,"
+    "https://campusquery.vercel.app"
 )
 _origins = [
     origin.strip()
     for origin in os.getenv("FRONTEND_ORIGINS", _default_origins).split(",")
     if origin.strip()
 ]
-_origin_regex = os.getenv("FRONTEND_ORIGIN_REGEX") or None
+# Covers production and Vercel preview URLs for this project, e.g.
+# https://campus-query-<hash>-<team>.vercel.app
+_default_origin_regex = r"^https://campus-query[a-z0-9-]*\.vercel\.app$"
+_origin_regex = (
+    os.getenv("FRONTEND_ORIGIN_REGEX") or _default_origin_regex
+).strip() or None
 _allowed_origins = _origins + ([_origin_regex] if _origin_regex else [])
 
 CORS(
